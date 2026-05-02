@@ -15,9 +15,19 @@ android {
         versionName = (project.findProperty("appVersionName") as String?) ?: "0.2.0-dev"
     }
 
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "footnotedebug"
+            keyAlias = "footnote-debug"
+            keyPassword = "footnotedebug"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 
