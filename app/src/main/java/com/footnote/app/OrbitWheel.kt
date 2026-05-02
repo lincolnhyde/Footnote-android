@@ -84,6 +84,11 @@ fun OrbitWheel(
     var pointer by remember { mutableStateOf<Offset?>(null) }
     var hoveredSlotIdx by remember { mutableStateOf<Int?>(null) }
     var hoverProgress by remember { mutableStateOf(0f) }
+    // Pop arming: after bloom-from-slot drill the finger is inside the new
+    // activation ring; we mustn't treat the user's first outward drag as pop.
+    // Arm on outside→inside, fire on inside→outside. Reset on every frame change.
+    var popArmed by remember { mutableStateOf(false) }
+    var frameJustChanged by remember { mutableStateOf(true) }
 
     val density = LocalDensity.current
     val activationRadiusPx = with(density) { 44.dp.toPx() }
@@ -107,6 +112,8 @@ fun OrbitWheel(
     LaunchedEffect(slots) {
         hoveredSlotIdx = null
         hoverProgress = 0f
+        popArmed = false
+        frameJustChanged = true
         if (slots.isNotEmpty()) {
             frameAlpha.snapTo(0f)
             frameAlpha.animateTo(1f, tween(durationMillis = 200))
@@ -131,6 +138,10 @@ fun OrbitWheel(
         if (anchor != null && idx < s.size) {
             val pos = slotPos(anchor, idx, s.size, wheelRadiusPx)
             view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            // Pre-arm reset: bloom puts the finger inside the new activation; the
+            // first outward drag must not register as pop.
+            frameJustChanged = true
+            popArmed = false
             latestOnDrillRequested(idx, pos)
         }
         hoveredSlotIdx = null
@@ -159,6 +170,8 @@ fun OrbitWheel(
                         hoverProgress = 0f
                         wasInActivation = false
                         popCooldownEnd = 0L
+                        popArmed = false
+                        frameJustChanged = true
                         scope.launch {
                             appear.snapTo(0f)
                             appear.animateTo(1f, tween(durationMillis = 180))
@@ -186,13 +199,25 @@ fun OrbitWheel(
                                 }
                             }
 
-                            if (wasInActivation && !inActivation && now > popCooldownEnd) {
-                                popCooldownEnd = now + 220
-                                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                                latestOnPopRequested()
+                            if (frameJustChanged) {
+                                // Re-baseline activation tracking after a frame change.
+                                // Bloom anchors the new wheel under the finger, so the
+                                // very first inActivation reading isn't a real transition.
+                                frameJustChanged = false
+                                wasInActivation = inActivation
+                            } else {
+                                if (!wasInActivation && inActivation) {
+                                    popArmed = true
+                                }
+                                if (popArmed && wasInActivation && !inActivation && now > popCooldownEnd) {
+                                    popCooldownEnd = now + 220
+                                    popArmed = false
+                                    frameJustChanged = true
+                                    view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                    latestOnPopRequested()
+                                }
+                                wasInActivation = inActivation
                             }
-
-                            wasInActivation = inActivation
                         }
                     },
                     onDragEnd = {
