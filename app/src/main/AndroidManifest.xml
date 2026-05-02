@@ -18,6 +18,8 @@
 
     <application
         android:label="Footnote"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:theme="@style/Theme.Footnote"
         android:allowBackup="false">
 
