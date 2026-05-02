@@ -12,6 +12,11 @@ class CatalogRoot(private val appCtx: Context) {
     private val curated = CuratedAppsProvider(appCtx)
     private val installed = InstalledAppsProvider(appCtx)
 
+    /**
+     * Wheel-era root composition. Kept around so the parked OrbitHost can still
+     * compile if we re-wire it temporarily. The edge launcher uses [suggested]
+     * and [installedApps] directly.
+     */
     suspend fun rootSlots(ctx: ContextSnapshot): List<Slot> {
         val curatedSlots = curated.slots(ctx)
         val tail = buildList {
@@ -22,13 +27,9 @@ class CatalogRoot(private val appCtx: Context) {
 
         val dao = FootnoteDb.get(appCtx).selections()
         val historyCount = runCatching { dao.count() }.getOrDefault(0)
-        if (historyCount < COLD_START_THRESHOLD) {
-            // Not enough signal yet — show today's deterministic root.
-            return tail
-        }
+        if (historyCount < COLD_START_THRESHOLD) return tail
 
-        val rankableRoots = curatedSlots + installed.branch
-        val candidates = collectCandidates(rankableRoots, ctx)
+        val candidates = collectCandidates(curatedSlots + installed.branch, ctx)
         val recent = runCatching { dao.recent(limit = HISTORY_LIMIT) }
             .getOrDefault(emptyList())
         val predicted = SlotRanker.rank(candidates.map { it.leaf }, recent, ctx, PREDICTED_LIMIT)
@@ -37,14 +38,43 @@ class CatalogRoot(private val appCtx: Context) {
         val parentLabelById = candidates.associate { it.leaf.id to it.parentLabel }
         val labeled = predicted.map { leaf ->
             val parent = parentLabelById[leaf.id]
-            // Installed-app leaves already use the app's name as label, so adding
-            // "All apps" as a prefix would be noise. Only prefix if the parent is
-            // semantically meaningful (curated app branches: Spotify, Maps, YouTube).
             if (parent.isNullOrBlank() || parent == installed.branch.label) leaf
             else leaf.copy(label = "$parent ${leaf.label}")
         }
-
         return labeled + tail
+    }
+
+    /** Top-N predicted leaves for the edge launcher's Immediate / Active Stack. */
+    suspend fun suggested(ctx: ContextSnapshot, limit: Int): List<Slot.Leaf> {
+        val dao = FootnoteDb.get(appCtx).selections()
+        val curatedSlots = curated.slots(ctx)
+        val candidates = collectCandidates(curatedSlots + installed.branch, ctx)
+        val recent = runCatching { dao.recent(limit = HISTORY_LIMIT) }
+            .getOrDefault(emptyList())
+        val predicted = SlotRanker.rank(candidates.map { it.leaf }, recent, ctx, limit)
+        if (predicted.isEmpty()) return emptyList()
+
+        val parentLabelById = candidates.associate { it.leaf.id to it.parentLabel }
+        return predicted.map { leaf ->
+            val parent = parentLabelById[leaf.id]
+            if (parent.isNullOrBlank() || parent == installed.branch.label) leaf
+            else leaf.copy(label = "$parent ${leaf.label}")
+        }
+    }
+
+    /** Flat alphabetised installed apps, for the panel's overflow rows. */
+    suspend fun installedApps(): List<Slot.Leaf> = installed.loadAll()
+
+    /** Full searchable set: curated leaves + installed apps + settings leaves. */
+    suspend fun allSearchable(ctx: ContextSnapshot): List<Slot.Leaf> {
+        val out = mutableListOf<Slot.Leaf>()
+        for (cand in collectCandidates(curated.slots(ctx), ctx)) out += cand.leaf
+        out += installed.loadAll()
+        for (cand in collectCandidates(listOf(SystemSettingsProvider.branch), ctx)) out += cand.leaf
+        // Dedup by id while preserving order — installed-app leaves can collide
+        // with curated.open leaves on rare cases (different ids by design today).
+        val seen = mutableSetOf<String>()
+        return out.filter { seen.add(it.id) }
     }
 
     private suspend fun collectCandidates(
@@ -82,12 +112,7 @@ class CatalogRoot(private val appCtx: Context) {
     private data class Candidate(val parentLabel: String?, val leaf: Slot.Leaf)
 
     companion object {
-        // Predict from the very first launch — even one signal beats the
-        // deterministic root for someone who just launched what they want.
         private const val COLD_START_THRESHOLD = 1
-        // How many predicted leaves to show at the root (tail = curated branches +
-        // All apps + Settings, currently 5 entries — keeping pred small avoids
-        // pagination pressure on the wheel).
         private const val PREDICTED_LIMIT = 3
         private const val HISTORY_LIMIT = 500
     }

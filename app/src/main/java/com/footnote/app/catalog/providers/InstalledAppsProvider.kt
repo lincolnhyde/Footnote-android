@@ -17,7 +17,7 @@ class InstalledAppsProvider(private val appCtx: Context) {
         children = { _ -> loadGrouped() }
     )
 
-    private suspend fun loadAll(): List<Slot.Leaf> = withContext(Dispatchers.IO) {
+    suspend fun loadAll(): List<Slot.Leaf> = withContext(Dispatchers.IO) {
         val pm = appCtx.packageManager
         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         @Suppress("DEPRECATION")

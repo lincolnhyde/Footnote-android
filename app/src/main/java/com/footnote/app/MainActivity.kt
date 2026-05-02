@@ -1,6 +1,7 @@
 package com.footnote.app
 
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -16,36 +17,34 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.footnote.app.catalog.CatalogRoot
-import com.footnote.app.core.IntentLauncher
-import com.footnote.app.ranking.ContextSnapshot
-import com.footnote.app.ranking.SelectionLogger
-import com.footnote.app.ui.orbit.OrbitHost
+import com.footnote.app.onboarding.OnboardingActivity
+import com.footnote.app.onboarding.hasAllPermissions
+import com.footnote.app.overlay.OverlayService
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { FootnoteScreen() }
+        if (!hasAllPermissions(this)) {
+            startActivity(Intent(this, OnboardingActivity::class.java))
+            finish()
+            return
+        }
+        OverlayService.start(this)
+        setContent { StatusScreen() }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (hasAllPermissions(this)) {
+            OverlayService.start(this)
+        }
     }
 }
 
-private fun versionLabel(ctx: Context): String {
-    val info = runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0) }.getOrNull()
-    val name = info?.versionName ?: "?"
-    val code = info?.let {
-        if (android.os.Build.VERSION.SDK_INT >= 28) it.longVersionCode else it.versionCode.toLong()
-    } ?: 0L
-    return "v$name · build $code"
-}
-
 @Composable
-fun FootnoteScreen() {
+private fun StatusScreen() {
     val ctx = LocalContext.current
-    val appCtx = ctx.applicationContext
-    var orbitUses by remember { mutableStateOf(0) }
-    var lastFired by remember { mutableStateOf<String?>(null) }
     val version = remember { versionLabel(ctx) }
-    val catalog = remember { CatalogRoot(appCtx) }
 
     Box(
         modifier = Modifier
@@ -72,44 +71,20 @@ fun FootnoteScreen() {
             )
             Spacer(Modifier.height(28.dp))
             Text(
-                text = "press, drag, release",
+                text = "edge launcher running",
                 color = Color(0xFF8A8580),
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Light,
                 letterSpacing = 2.sp
             )
-        }
-
-        OrbitHost(
-            rootSlotsLoader = { catalog.rootSlots(ContextSnapshot.now()) },
-            onLeafFired = { leaf ->
-                IntentLauncher.launch(ctx, leaf.action)
-                SelectionLogger.log(ctx, leaf.id, ContextSnapshot.now())
-                orbitUses += 1
-                lastFired = leaf.label
-            }
-        )
-
-        Column(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(20.dp),
-            horizontalAlignment = Alignment.End
-        ) {
+            Spacer(Modifier.height(8.dp))
             Text(
-                text = "$orbitUses",
+                text = "pull from right edge to open",
                 color = Color(0xFF6E6A65),
                 fontSize = 11.sp,
+                fontWeight = FontWeight.Light,
                 letterSpacing = 1.sp
             )
-            lastFired?.let {
-                Text(
-                    text = it.lowercase(),
-                    color = Color(0xFF6E6A65),
-                    fontSize = 10.sp,
-                    letterSpacing = 1.sp
-                )
-            }
         }
 
         Text(
@@ -122,4 +97,13 @@ fun FootnoteScreen() {
                 .padding(16.dp)
         )
     }
+}
+
+private fun versionLabel(ctx: Context): String {
+    val info = runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0) }.getOrNull()
+    val name = info?.versionName ?: "?"
+    val code = info?.let {
+        if (android.os.Build.VERSION.SDK_INT >= 28) it.longVersionCode else it.versionCode.toLong()
+    } ?: 0L
+    return "v$name · build $code"
 }
