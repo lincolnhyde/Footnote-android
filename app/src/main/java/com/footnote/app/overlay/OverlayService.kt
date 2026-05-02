@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
 import android.view.Gravity
+import android.view.View
 import android.view.WindowManager
 import androidx.core.app.NotificationCompat
 import com.footnote.app.MainActivity
@@ -29,21 +30,37 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Foreground service that owns a single WindowManager overlay window. Resizes
- * the window between an edge strip (resting) and fullscreen (panel open) in
- * response to gestures from [OverlayHostView]. Touch sequences survive the
- * resize because we use [android.view.MotionEvent.getRawX], not window-local
- * coords, for pull math.
+ * Foreground service that owns two WindowManager overlay windows:
+ *
+ *   StripWindow — 24dp wide, always alive at the right edge. Captures the
+ *     pull gesture. Once it owns ACTION_DOWN, the InputDispatcher routes all
+ *     subsequent MOVE events here even if the finger leaves the window's
+ *     bounds — so we get the full-screen pull without resizing.
+ *
+ *   PanelWindow — fixed-width (PANEL_WIDTH_DP) on the right edge. Visible
+ *     during gesture and after settle. Starts NOT_TOUCHABLE so the strip
+ *     keeps gesture ownership; flips to touchable on settle so the user can
+ *     tap rows. Becomes focusable when entering Search depth so the EditText
+ *     can receive input.
+ *
+ * The two windows do not overlap touchably: the strip is always touchable on
+ * its 24dp slice; the panel becomes touchable on the 280dp slab that does
+ * not include the rightmost 24dp (we offset its right edge by the strip
+ * width so the strip stays clickable for dismiss-on-tap).
  */
 class OverlayService : Service() {
 
     private lateinit var wm: WindowManager
-    private var hostView: OverlayHostView? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private lateinit var catalog: CatalogRoot
 
-    @Volatile
-    private var searchablePool: List<Slot.Leaf> = emptyList()
+    private var stripView: StripView? = null
+    private var panelView: PanelView? = null
+
+    @Volatile private var searchablePool: List<Slot.Leaf> = emptyList()
+
+    private enum class Mode { Closed, Gesturing, SettledOpen }
+    private var mode: Mode = Mode.Closed
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -56,14 +73,16 @@ class OverlayService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (hostView == null) showOverlay()
+        if (stripView == null) showOverlay()
         return START_STICKY
     }
 
     override fun onDestroy() {
         scope.cancel()
-        hostView?.let { runCatching { wm.removeView(it) } }
-        hostView = null
+        stripView?.let { runCatching { wm.removeView(it) } }
+        panelView?.let { runCatching { wm.removeView(it) } }
+        stripView = null
+        panelView = null
         super.onDestroy()
     }
 
@@ -94,9 +113,6 @@ class OverlayService : Service() {
 
         if (Build.VERSION.SDK_INT >= 34) {
             startForeground(NOTIF_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
-        } else if (Build.VERSION.SDK_INT >= 29) {
-            @Suppress("DEPRECATION")
-            startForeground(NOTIF_ID, notif)
         } else {
             startForeground(NOTIF_ID, notif)
         }
@@ -107,17 +123,46 @@ class OverlayService : Service() {
             stopSelf()
             return
         }
-        if (hostView != null) return
-        val host = OverlayHostView(this)
-        host.callbacks = object : OverlayHostView.Callbacks {
-            override fun onActivate() {
-                runCatching { wm.updateViewLayout(host, fullscreenParams()) }
+        if (stripView != null) return
+
+        val strip = StripView(this)
+        val panel = PanelView(this)
+
+        strip.callbacks = object : StripView.Callbacks {
+            override fun onPressStart() {
+                mode = Mode.Gesturing
+                panel.visibility = View.VISIBLE
+                panel.renderForDepth(PullDepth.Immediate)
+                // Stay non-touchable during gesture — strip owns the touch sequence.
+                applyPanelFlags(touchable = false, focusable = false)
             }
 
-            override fun onDismiss() {
-                runCatching { wm.updateViewLayout(host, stripParams()) }
+            override fun onPullChange(pullFraction: Float) {
+                if (mode != Mode.Gesturing) return
+                val live = depthForFraction(pullFraction, snap = false)
+                panel.renderForDepth(live)
             }
 
+            override fun onPressEnd(pullFraction: Float) {
+                if (mode != Mode.Gesturing) return
+                val snapped = depthForFraction(pullFraction, snap = true)
+                if (snapped == PullDepth.Closed) {
+                    dismiss()
+                } else {
+                    mode = Mode.SettledOpen
+                    panel.renderForDepth(snapped)
+                    applyPanelFlags(touchable = true, focusable = snapped == PullDepth.Search)
+                    if (snapped == PullDepth.Search) panel.focusSearchInput()
+                    strip.dismissOnTap = true
+                }
+            }
+
+            override fun onDismissRequest() {
+                dismiss()
+            }
+        }
+
+        panel.callbacks = object : PanelView.Callbacks {
             override fun onLeafTap(leaf: Slot.Leaf) {
                 IntentLauncher.launch(applicationContext, leaf.action)
                 SelectionLogger.log(
@@ -125,20 +170,45 @@ class OverlayService : Service() {
                     leaf.id,
                     ContextSnapshot.now(triggerSource = "EDGE_SWIPE")
                 )
-                refreshSuggestions(host)
+                dismiss()
+                refreshSuggestions()
                 refreshSearchablePool()
             }
 
             override fun onSearch(query: String): List<Slot.Leaf> =
                 SearchIndex.search(query, searchablePool, limit = 12)
+
+            override fun onCloseTap() {
+                dismiss()
+            }
         }
-        runCatching { wm.addView(host, stripParams()) }
-        hostView = host
-        refreshSuggestions(host)
+
+        runCatching { wm.addView(strip, stripParams()) }
+        panel.visibility = View.GONE
+        runCatching { wm.addView(panel, panelParams(touchable = false, focusable = false)) }
+
+        stripView = strip
+        panelView = panel
+        refreshSuggestions()
         refreshSearchablePool()
     }
 
-    private fun refreshSuggestions(host: OverlayHostView) {
+    private fun dismiss() {
+        mode = Mode.Closed
+        val panel = panelView ?: return
+        panel.resetSearch()
+        panel.visibility = View.GONE
+        applyPanelFlags(touchable = false, focusable = false)
+        stripView?.dismissOnTap = false
+    }
+
+    private fun applyPanelFlags(touchable: Boolean, focusable: Boolean) {
+        val panel = panelView ?: return
+        runCatching { wm.updateViewLayout(panel, panelParams(touchable, focusable)) }
+    }
+
+    private fun refreshSuggestions() {
+        val panel = panelView ?: return
         scope.launch {
             val items = withContext(Dispatchers.IO) {
                 runCatching {
@@ -148,7 +218,7 @@ class OverlayService : Service() {
                     )
                 }.getOrDefault(emptyList())
             }
-            host.setSuggested(items)
+            panel.setSuggested(items)
         }
     }
 
@@ -173,7 +243,7 @@ class OverlayService : Service() {
             WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
         val density = resources.displayMetrics.density
         return WindowManager.LayoutParams(
-            (24 * density).toInt(),
+            (STRIP_WIDTH_DP * density).toInt(),
             WindowManager.LayoutParams.MATCH_PARENT,
             overlayType(),
             flags,
@@ -183,23 +253,31 @@ class OverlayService : Service() {
         }
     }
 
-    private fun fullscreenParams(): WindowManager.LayoutParams {
-        // Focusable when fullscreen so the search EditText can receive key events.
-        val flags = WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+    private fun panelParams(touchable: Boolean, focusable: Boolean): WindowManager.LayoutParams {
+        var flags = WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+        if (!touchable) flags = flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+        if (!focusable) flags = flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+        val density = resources.displayMetrics.density
         return WindowManager.LayoutParams(
-            WindowManager.LayoutParams.MATCH_PARENT,
+            (PANEL_WIDTH_DP * density).toInt(),
             WindowManager.LayoutParams.MATCH_PARENT,
             overlayType(),
             flags,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.TOP or Gravity.START
+            // Anchor right edge — but offset by the strip width so the strip
+            // window stays clickable for dismiss-on-tap.
+            gravity = Gravity.END or Gravity.CENTER_VERTICAL
+            x = (STRIP_WIDTH_DP * density).toInt()
         }
     }
 
     companion object {
         private const val NOTIF_ID = 1001
         private const val CHANNEL_ID = "footnote-overlay"
+        private const val STRIP_WIDTH_DP = 24
+        private const val PANEL_WIDTH_DP = 300
 
         fun start(ctx: Context) {
             val intent = Intent(ctx, OverlayService::class.java)
