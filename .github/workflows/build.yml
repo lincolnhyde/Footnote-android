@@ -45,6 +45,22 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Mirror build log to ci-log branch (failure path)
+        if: failure() && steps.build.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p /tmp/ci-log-clone
+          cp /tmp/build.log /tmp/ci-log-clone/build.log
+          cd /tmp/ci-log-clone
+          git init -q -b ci-log-${{ github.run_number }}
+          git config user.email "ci@footnote.local"
+          git config user.name "Footnote CI"
+          git add build.log
+          git commit -q -m "CI build ${{ github.run_number }} failed (sha ${{ github.sha }})"
+          git remote add origin "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
+          git push -f origin ci-log-${{ github.run_number }}
+
       - name: Rename APK with run number
         if: success()
         run: cp app/build/outputs/apk/debug/app-debug.apk footnote-prototype-${{ github.run_number }}.apk
