@@ -117,37 +117,39 @@ fun OrbitWheel(
                         change.consume()
                         pointer = change.position
 
-                        val c = center ?: return@detectDragGesturesAfterLongPress
-                        val p = change.position
-                        val dist = hypot(p.x - c.x, p.y - c.y)
-                        val now = System.currentTimeMillis()
-                        val s = latestSlots
+                        val c = center
+                        if (c != null) {
+                            val p = change.position
+                            val dist = hypot(p.x - c.x, p.y - c.y)
+                            val now = System.currentTimeMillis()
+                            val s = latestSlots
 
-                        val inDrillZone = dist > wheelRadiusPx + drillThresholdPx
-                        val inActivation = dist < activationRadiusPx
+                            val inDrillZone = dist > wheelRadiusPx + drillThresholdPx
+                            val inActivation = dist < activationRadiusPx
 
-                        if (!wasInDrillZone && inDrillZone && now > drillCooldownEnd && s.isNotEmpty()) {
-                            val sel = computeSelectedSlot(c, p, s.size, activationRadiusPx)
-                            val candidate = sel?.let { s.getOrNull(it) }
-                            val canDrill = candidate is Slot.Branch ||
-                                (candidate is Slot.Leaf &&
-                                    (candidate.action is SlotAction.PagePrev ||
-                                     candidate.action is SlotAction.PageNext))
-                            if (sel != null && canDrill) {
-                                drillCooldownEnd = now + 220
-                                popCooldownEnd = now + 220
-                                latestOnDrillRequested(sel)
+                            if (!wasInDrillZone && inDrillZone && now > drillCooldownEnd && s.isNotEmpty()) {
+                                val sel = computeSelectedSlot(c, p, s.size, activationRadiusPx)
+                                val candidate = sel?.let { s.getOrNull(it) }
+                                val canDrill = candidate is Slot.Branch ||
+                                    (candidate is Slot.Leaf &&
+                                        (candidate.action is SlotAction.PagePrev ||
+                                         candidate.action is SlotAction.PageNext))
+                                if (sel != null && canDrill) {
+                                    drillCooldownEnd = now + 220
+                                    popCooldownEnd = now + 220
+                                    latestOnDrillRequested(sel)
+                                }
                             }
-                        }
 
-                        if (wasInActivation && !inActivation && now > popCooldownEnd) {
-                            popCooldownEnd = now + 220
-                            drillCooldownEnd = now + 220
-                            latestOnPopRequested()
-                        }
+                            if (wasInActivation && !inActivation && now > popCooldownEnd) {
+                                popCooldownEnd = now + 220
+                                drillCooldownEnd = now + 220
+                                latestOnPopRequested()
+                            }
 
-                        wasInDrillZone = inDrillZone
-                        wasInActivation = inActivation
+                            wasInDrillZone = inDrillZone
+                            wasInActivation = inActivation
+                        }
                     },
                     onDragEnd = {
                         val c = center
