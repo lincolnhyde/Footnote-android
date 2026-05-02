@@ -3,6 +3,7 @@ package com.footnote.app
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.ComponentActivity
@@ -29,7 +30,8 @@ class MainActivity : ComponentActivity() {
             }
             if (showOnboarding) {
                 OnboardingScreen(
-                    onOpenSideKeySettings = { openSideKeySettings() },
+                    onOpenAppInfo = { openAppInfo() },
+                    onOpenAccessibilitySettings = { openAccessibilitySettings() },
                     onDismiss = {
                         prefs().edit().putBoolean(KEY_NEEDS_SETUP, false).apply()
                         showOnboarding = false
@@ -37,7 +39,7 @@ class MainActivity : ComponentActivity() {
                 )
             } else {
                 LauncherScreen(
-                    triggerSource = "SIDE_KEY",
+                    triggerSource = "A11Y_SHORTCUT",
                     onLaunch = { leaf -> launchAndFinish(leaf) }
                 )
             }
@@ -53,29 +55,29 @@ class MainActivity : ComponentActivity() {
 
     private fun launchAndFinish(leaf: Slot.Leaf) {
         IntentLauncher.launch(this, leaf.action)
-        SelectionLogger.log(this, leaf.id, ContextSnapshot.now(triggerSource = "SIDE_KEY"))
+        SelectionLogger.log(this, leaf.id, ContextSnapshot.now(triggerSource = "A11Y_SHORTCUT"))
         finish()
     }
 
-    private fun openSideKeySettings() {
-        val attempts = listOf(
-            Intent("com.samsung.android.settings.SIDE_KEY"),
-            Intent("com.samsung.settings.SIDE_KEY_SETTING"),
-            Intent(Settings.ACTION_SETTINGS)
-        )
-        for (intent in attempts) {
-            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-            if (intent.resolveActivity(packageManager) != null) {
-                val launched = runCatching { startActivity(intent) }.isSuccess
-                if (launched) return
-            }
+    private fun openAppInfo() {
+        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+            data = Uri.fromParts("package", packageName, null)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
         }
+        runCatching { startActivity(intent) }
+    }
+
+    private fun openAccessibilitySettings() {
+        val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        runCatching { startActivity(intent) }
     }
 
     private fun prefs(): SharedPreferences =
         getSharedPreferences("footnote_prefs", Context.MODE_PRIVATE)
 
     companion object {
-        private const val KEY_NEEDS_SETUP = "needs_side_key_setup"
+        private const val KEY_NEEDS_SETUP = "needs_setup"
     }
 }

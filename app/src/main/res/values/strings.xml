@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Footnote</string>
+    <string name="a11y_service_summary">Open Footnote from anywhere</string>
+    <string name="a11y_service_description">When this is on, the volume-key Accessibility shortcut and the floating accessibility button both open Footnote — from any screen, including the lockscreen.</string>
 </resources>

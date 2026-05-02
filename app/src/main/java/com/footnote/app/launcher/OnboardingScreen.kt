@@ -2,7 +2,9 @@ package com.footnote.app.launcher
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
@@ -17,7 +19,8 @@ import androidx.compose.ui.unit.sp
 
 @Composable
 fun OnboardingScreen(
-    onOpenSideKeySettings: () -> Unit,
+    onOpenAppInfo: () -> Unit,
+    onOpenAccessibilitySettings: () -> Unit,
     onDismiss: () -> Unit
 ) {
     Box(
@@ -33,8 +36,9 @@ fun OnboardingScreen(
         Column(
             modifier = Modifier
                 .align(Alignment.Center)
-                .padding(36.dp)
-                .fillMaxWidth(),
+                .padding(28.dp)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
@@ -46,43 +50,60 @@ fun OnboardingScreen(
             )
             Spacer(Modifier.height(20.dp))
             Text(
-                text = "one-step setup",
+                text = "setup",
                 color = Color(0xFF8A8580),
                 fontSize = 12.sp,
                 letterSpacing = 2.sp,
                 fontWeight = FontWeight.Light
             )
-            Spacer(Modifier.height(36.dp))
+            Spacer(Modifier.height(28.dp))
 
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(Color(0x141A1816), RoundedCornerShape(12.dp))
                     .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Step("1", "Open Settings → Advanced features → Side key.")
-                Step("2", "Set Press and hold → Open app.")
-                Step("3", "Pick Footnote.")
+                Step("1", "App info → ⋮ menu (top right) → Allow restricted settings.")
+                Step("2", "Accessibility → Installed apps → Footnote → On.")
+                Step("3", "Accessibility → Accessibility shortcut → Volume keys → Footnote.")
+                Step("•", "Then hold both volume keys for 3 seconds, anywhere.")
             }
 
-            Spacer(Modifier.height(28.dp))
+            Spacer(Modifier.height(24.dp))
 
             Button(
-                onClick = onOpenSideKeySettings,
+                onClick = onOpenAppInfo,
+                modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color(0xFFE8B86E),
                     contentColor = Color(0xFF1A1816)
                 ),
                 shape = RoundedCornerShape(10.dp)
             ) {
-                Text("Open Settings", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                Text("Open App Info (step 1)", fontSize = 13.sp, fontWeight = FontWeight.Medium)
             }
 
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(10.dp))
+
+            Button(
+                onClick = onOpenAccessibilitySettings,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFFE8B86E),
+                    contentColor = Color(0xFF1A1816)
+                ),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text("Open Accessibility (steps 2 & 3)", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+            }
+
+            Spacer(Modifier.height(10.dp))
 
             Button(
                 onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color(0xFF2A2825),
                     contentColor = Color(0xFFE8B86E)
@@ -91,6 +112,8 @@ fun OnboardingScreen(
             ) {
                 Text("I've set it up", fontSize = 13.sp, fontWeight = FontWeight.Medium)
             }
+
+            Spacer(Modifier.height(20.dp))
         }
     }
 }
@@ -103,7 +126,9 @@ private fun Step(num: String, text: String) {
             color = Color(0xFFE8B86E),
             fontSize = 12.sp,
             fontWeight = FontWeight.Medium,
-            modifier = Modifier.padding(end = 12.dp, top = 1.dp)
+            modifier = Modifier
+                .padding(end = 12.dp, top = 1.dp)
+                .width(14.dp)
         )
         Text(
             text = text,
