@@ -1,18 +1,26 @@
 package com.footnote.app
 
+import android.accessibilityservice.AccessibilityButtonController
 import android.accessibilityservice.AccessibilityService
 import android.content.Intent
 import android.view.accessibility.AccessibilityEvent
 
 class FootnoteAccessibilityService : AccessibilityService() {
 
+    private val buttonCallback = object : AccessibilityButtonController.AccessibilityButtonCallback() {
+        override fun onClicked(controller: AccessibilityButtonController) {
+            openLauncher()
+        }
+    }
+
+    override fun onServiceConnected() {
+        super.onServiceConnected()
+        accessibilityButtonController.registerAccessibilityButtonCallback(buttonCallback)
+    }
+
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
 
     override fun onInterrupt() {}
-
-    override fun onAccessibilityButtonClicked() {
-        openLauncher()
-    }
 
     private fun openLauncher() {
         val intent = Intent(this, MainActivity::class.java).apply {
