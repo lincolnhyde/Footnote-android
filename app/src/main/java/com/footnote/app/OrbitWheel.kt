@@ -54,16 +54,6 @@ private fun computeSelectedSlot(
     return ((deg + perSlot / 2f) % 360f / perSlot).toInt() % slotCount
 }
 
-private fun slotPos(anchor: Offset, idx: Int, slotCount: Int, wheelRadiusPx: Float): Offset {
-    val perSlot = 360f / slotCount
-    val angleDeg = -90f + idx * perSlot
-    val rad = Math.toRadians(angleDeg.toDouble())
-    return Offset(
-        anchor.x + wheelRadiusPx * cos(rad).toFloat(),
-        anchor.y + wheelRadiusPx * sin(rad).toFloat()
-    )
-}
-
 private fun isDwellEligible(slot: Slot?): Boolean = when (slot) {
     is Slot.Branch -> true
     is Slot.Leaf -> slot.action is SlotAction.PagePrev || slot.action is SlotAction.PageNext
@@ -77,16 +67,16 @@ fun OrbitWheel(
     modifier: Modifier = Modifier,
     onSlotChosen: (Int) -> Unit = {},
     onCancelled: () -> Unit = {},
-    onDrillRequested: (Int, Offset) -> Unit = { _, _ -> },
+    onDrillRequested: (Int) -> Unit = {},
     onPopRequested: () -> Unit = {}
 ) {
     var pressStart by remember { mutableStateOf<Offset?>(null) }
     var pointer by remember { mutableStateOf<Offset?>(null) }
     var hoveredSlotIdx by remember { mutableStateOf<Int?>(null) }
     var hoverProgress by remember { mutableStateOf(0f) }
-    // Pop arming: after bloom-from-slot drill the finger is inside the new
-    // activation ring; we mustn't treat the user's first outward drag as pop.
-    // Arm on outside→inside, fire on inside→outside. Reset on every frame change.
+    // Pop must be armed: only fires after a fresh outside→inside transition
+    // followed by inside→outside. Reset on every frame change so a sub-orbit
+    // doesn't inherit pop arming from its parent.
     var popArmed by remember { mutableStateOf(false) }
     var frameJustChanged by remember { mutableStateOf(true) }
 
@@ -132,17 +122,14 @@ fun OrbitWheel(
             elapsed = now - start
             hoverProgress = (elapsed.toFloat() / DwellMs).coerceIn(0f, 1f)
         }
-        // Dwell complete — fire drill at slot position
-        val anchor = latestAnchor
+        // Dwell complete — fire drill. The anchor stays put; only the slot
+        // labels change underneath the user's finger.
         val s = latestSlots
-        if (anchor != null && idx < s.size) {
-            val pos = slotPos(anchor, idx, s.size, wheelRadiusPx)
+        if (idx < s.size) {
             view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-            // Pre-arm reset: bloom puts the finger inside the new activation; the
-            // first outward drag must not register as pop.
             frameJustChanged = true
             popArmed = false
-            latestOnDrillRequested(idx, pos)
+            latestOnDrillRequested(idx)
         }
         hoveredSlotIdx = null
         hoverProgress = 0f
@@ -236,10 +223,10 @@ fun OrbitWheel(
                         }
                         when {
                             sel == null -> latestOnCancelled()
-                            a != null && isDwellEligible(s.getOrNull(sel)) -> {
-                                // Release on a Branch / nav slot still drills, with bloom from slot pos
-                                val pos = slotPos(a, sel, s.size, wheelRadiusPx)
-                                latestOnDrillRequested(sel, pos)
+                            isDwellEligible(s.getOrNull(sel)) -> {
+                                // Release on a Branch / nav slot still drills, even
+                                // without dwelling, so users don't hit a dead end.
+                                latestOnDrillRequested(sel)
                             }
                             else -> latestOnSlotChosen(sel)
                         }

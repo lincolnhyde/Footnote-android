@@ -42,14 +42,17 @@ fun OrbitHost(
     val pageCount = currentFrame.pageCount()
     val currentAnchor = anchorOverrides.lastOrNull() ?: null
 
-    fun drillIntoBranch(slot: Slot.Branch, atPos: Offset) {
+    fun drillIntoBranch(slot: Slot.Branch) {
         scope.launch {
             val kids = runCatching { slot.children(snapshot()) }
                 .getOrDefault(emptyList())
             if (kids.isNotEmpty()) {
                 frames = frames + listOf(kids)
                 pageIndices = pageIndices + 0
-                anchorOverrides = anchorOverrides + atPos
+                // Marking-menu style: sub-orbit reuses the parent's anchor so
+                // the user's finger (currently at the parent slot's position)
+                // pre-points at the same-angle child of the new wheel.
+                anchorOverrides = anchorOverrides + anchorOverrides.lastOrNull()
                 breadcrumb = breadcrumb + slot.label
             }
         }
@@ -110,11 +113,7 @@ fun OrbitHost(
             onSlotChosen = { idx ->
                 val slot = displayedSlots.getOrNull(idx) ?: return@OrbitWheel
                 when (slot) {
-                    is Slot.Branch -> {
-                        // Release on a Branch — fall back to in-place drill so users without
-                        // the dwell muscle-memory still get somewhere.
-                        // Use anchor as the bloom origin since we don't have the slot pos here.
-                    }
+                    is Slot.Branch -> drillIntoBranch(slot)
                     is Slot.Leaf -> when (slot.action) {
                         SlotAction.PagePrev -> changePage(-1)
                         SlotAction.PageNext -> changePage(+1)
@@ -130,10 +129,10 @@ fun OrbitHost(
             onCancelled = {
                 if (frames.size > 1) popOneFrame()
             },
-            onDrillRequested = { idx, slotPos ->
+            onDrillRequested = { idx ->
                 val slot = displayedSlots.getOrNull(idx) ?: return@OrbitWheel
                 when (slot) {
-                    is Slot.Branch -> drillIntoBranch(slot, slotPos)
+                    is Slot.Branch -> drillIntoBranch(slot)
                     is Slot.Leaf -> when (slot.action) {
                         SlotAction.PagePrev -> changePage(-1)
                         SlotAction.PageNext -> changePage(+1)
