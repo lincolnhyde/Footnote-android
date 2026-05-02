@@ -24,6 +24,7 @@ fun OrbitHost(
 ) {
     var frames by remember { mutableStateOf<List<List<Slot>>>(emptyList()) }
     var pageIndices by remember { mutableStateOf<List<Int>>(emptyList()) }
+    var anchorOverrides by remember { mutableStateOf<List<Offset?>>(emptyList()) }
     var breadcrumb by remember { mutableStateOf<List<String>>(emptyList()) }
     val scope = rememberCoroutineScope()
 
@@ -31,6 +32,7 @@ fun OrbitHost(
         if (frames.isEmpty()) {
             frames = listOf(rootSlotsLoader())
             pageIndices = listOf(0)
+            anchorOverrides = listOf(null)
         }
     }
 
@@ -38,14 +40,16 @@ fun OrbitHost(
     val currentPage = pageIndices.lastOrNull() ?: 0
     val displayedSlots = currentFrame.paginate(currentPage)
     val pageCount = currentFrame.pageCount()
+    val currentAnchor = anchorOverrides.lastOrNull() ?: null
 
-    fun drillIntoBranch(slot: Slot.Branch) {
+    fun drillIntoBranch(slot: Slot.Branch, atPos: Offset) {
         scope.launch {
             val kids = runCatching { slot.children(snapshot()) }
                 .getOrDefault(emptyList())
             if (kids.isNotEmpty()) {
                 frames = frames + listOf(kids)
                 pageIndices = pageIndices + 0
+                anchorOverrides = anchorOverrides + atPos
                 breadcrumb = breadcrumb + slot.label
             }
         }
@@ -55,6 +59,7 @@ fun OrbitHost(
         if (frames.size > 1) {
             frames = frames.dropLast(1)
             pageIndices = pageIndices.dropLast(1)
+            anchorOverrides = anchorOverrides.dropLast(1)
             breadcrumb = breadcrumb.dropLast(1)
         }
     }
@@ -64,6 +69,15 @@ fun OrbitHost(
         val cur = pageIndices.last()
         val next = ((cur + delta) % pageCount + pageCount) % pageCount
         pageIndices = pageIndices.dropLast(1) + next
+    }
+
+    fun resetToRoot() {
+        if (frames.size > 1) {
+            frames = frames.take(1)
+            pageIndices = listOf(0)
+            anchorOverrides = listOf(null)
+            breadcrumb = emptyList()
+        }
     }
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -92,36 +106,39 @@ fun OrbitHost(
 
         OrbitWheel(
             slots = displayedSlots,
+            anchorOverride = currentAnchor,
             onSlotChosen = { idx ->
                 val slot = displayedSlots.getOrNull(idx) ?: return@OrbitWheel
                 when (slot) {
-                    is Slot.Branch -> drillIntoBranch(slot)
-                    is Slot.Leaf -> when (val a = slot.action) {
+                    is Slot.Branch -> {
+                        // Release on a Branch — fall back to in-place drill so users without
+                        // the dwell muscle-memory still get somewhere.
+                        // Use anchor as the bloom origin since we don't have the slot pos here.
+                    }
+                    is Slot.Leaf -> when (slot.action) {
                         SlotAction.PagePrev -> changePage(-1)
                         SlotAction.PageNext -> changePage(+1)
                         SlotAction.Pop -> popOneFrame()
                         SlotAction.NoOp -> Unit
                         else -> {
                             onLeafFired(slot)
-                            frames = frames.take(1)
-                            pageIndices = pageIndices.take(1).map { 0 }
-                            breadcrumb = emptyList()
+                            resetToRoot()
                         }
                     }
                 }
             },
             onCancelled = {
-                if (frames.size > 1) {
-                    popOneFrame()
-                }
+                if (frames.size > 1) popOneFrame()
             },
-            onDrillRequested = { idx ->
-                val slot = displayedSlots.getOrNull(idx)
-                if (slot is Slot.Branch) drillIntoBranch(slot)
-                else if (slot is Slot.Leaf) when (slot.action) {
-                    SlotAction.PagePrev -> changePage(-1)
-                    SlotAction.PageNext -> changePage(+1)
-                    else -> Unit
+            onDrillRequested = { idx, slotPos ->
+                val slot = displayedSlots.getOrNull(idx) ?: return@OrbitWheel
+                when (slot) {
+                    is Slot.Branch -> drillIntoBranch(slot, slotPos)
+                    is Slot.Leaf -> when (slot.action) {
+                        SlotAction.PagePrev -> changePage(-1)
+                        SlotAction.PageNext -> changePage(+1)
+                        else -> Unit
+                    }
                 }
             },
             onPopRequested = { popOneFrame() }
@@ -135,11 +152,7 @@ private fun PageDots(current: Int, total: Int) {
         repeat(total) { i ->
             val active = i == current
             val color = if (active) Color(0xFFE8B86E) else Color(0x55E8B86E)
-            Canvas(
-                modifier = Modifier
-                    .size(if (active) 5.dp else 4.dp)
-                    .padding(horizontal = 0.dp)
-            ) {
+            Canvas(modifier = Modifier.size(if (active) 5.dp else 4.dp)) {
                 drawCircle(color = color, center = Offset(size.width / 2, size.height / 2))
             }
             if (i < total - 1) Spacer(Modifier.width(5.dp))
