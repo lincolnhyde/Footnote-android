@@ -1,6 +1,6 @@
 # Footnote — Context Handover
 
-**Last updated:** 2026-05-02 (mid-session, Build 15 dwell-on-branch in CI)
+**Last updated:** 2026-05-02 (Build 16 shipped: dwell-on-Branch + bloom-from-slot)
 
 This doc gets a fresh chat session up to speed in five minutes. Read top to bottom, then read the plan file referenced below for the full architectural plan and decision history.
 
@@ -18,17 +18,18 @@ User is a non-technical product owner. Builds are validated on their personal An
 
 ## First thing to do in the new session
 
-1. **Check whether Build 15 (or higher) finished and shipped successfully.**
-   ```bash
-   curl -sS -H "Authorization: Bearer $GITHUB_PAT" \
-     "https://api.github.com/repos/lincolnhyde/Footnote-android/actions/runs?per_page=3&branch=main" \
-     | grep -E '"(run_number|status|conclusion|head_sha)"' | head -12
-   ```
-2. If green: pull the APK and mirror to `dl-build-N` per the procedure below, then send the user the raw URL.
-3. If red: pull `https://raw.githubusercontent.com/lincolnhyde/Footnote-android/ci-log-N/build.log` (the workflow auto-mirrors failed builds there) and grep for `^e: ` to find the Kotlin compile error.
-4. Tell the user where things stand and ask what they want to test.
+**Latest shipped APK (Build 16, dwell + bloom):**
+https://raw.githubusercontent.com/lincolnhyde/Footnote-android/dl-build-16/latest.apk
 
-The user's last instruction was: write this handover and let them start a new session. So expect the new session to start with the user testing whatever the latest mirrored APK is.
+The user installed this just before opening the new session. Greet them, ask how the dwell-on-Branch + bloom-from-slot model feels, and direct next steps based on their answer:
+- **Feels good:** move to Phase 2 (system overlay) per "Where to start" below.
+- **Needs tuning:** dial-twist options listed in "Option C — Phase 1.7 polish."
+- **Still feels wrong:** revisit gesture model. The research doc trail in the plan file lists 4 alternatives we didn't pick (concentric ring, marking-menu, slot-bloom inline, velocity-based).
+
+If you push any code, before sending the user a URL:
+1. Confirm CI green: `curl -sS -H "Authorization: Bearer $GITHUB_PAT" "https://api.github.com/repos/lincolnhyde/Footnote-android/actions/runs?per_page=3&branch=main" | grep -E '"(run_number|status|conclusion|head_sha)"' | head -12`
+2. If green: pull the APK and mirror to `dl-build-N` per the procedure below.
+3. If red: pull `https://raw.githubusercontent.com/lincolnhyde/Footnote-android/ci-log-N/build.log` and grep for `^e: ` to find the Kotlin compile error.
 
 ---
 
@@ -39,7 +40,8 @@ Long history, condensed:
 - **Build 7 (Phase 1):** flat → hierarchical Slot model (Leaf / Branch). Drilling required releasing on a Branch then long-pressing again. Worked but broke the "single fluid gesture" promise.
 - **Build 8 → 13 (Phase 1.5):** drag-past-the-ring drill. Drag your finger past the wheel ring on a Branch (40 dp past at first, then 14 dp) → drill. Plus pop (drag inward through activation, back outward) and pagination (>8 slots → 6 reals + ‹prev/›next + blanks per page).
 - **Build 14 (Phase 1.6):** tightened drill threshold + sharper visual + haptic on drill/pop.
-- **Build 15 (Phase 1.7) — JUST PUSHED, IN CI AT HANDOVER WRITE TIME:** **drag-past-ring abandoned entirely.** Replaced with:
+- **Build 15:** failed in CI on a stray import (`kotlinx.coroutines.withFrameMillis` doesn't exist; the function lives in `androidx.compose.runtime`). Fixed in next push.
+- **Build 16 (Phase 1.7) — SHIPPED, INSTALLED ON USER'S PHONE:** **drag-past-ring abandoned entirely.** Replaced with:
   - **Dwell-on-Branch:** pause your finger on a Branch (or page-nav) slot for ~280 ms; a progress arc fills around the slot label; at completion drill fires with a haptic tick.
   - **Bloom-from-slot:** when drill fires, the children render around the **slot's screen position** (where the finger already is), not the original wheel center. Mental model: the slot itself reveals its contents.
   - **Release on Branch still drills** (with the same bloom origin), so impatient users don't hit dead ends.
@@ -238,7 +240,7 @@ Common dial twists if the user reports issues:
 - **Tests** — unit tests are valuable but the project doesn't have a JVM test suite yet. Validation loop is "user installs and tries it." When in doubt, ship and let the user be the test.
 - **Tone**: short, direct, no padding. The user's frustration spike happened around download stalling and around "drilling doesn't work" — when something blocks them, fix it before continuing.
 - **Plan mode is on by default** in this workspace per the chat session config. Use `AskUserQuestion` for clarifying forks; use `ExitPlanMode` for plan approval. Never write to files outside the plan file while in plan mode.
-- **Builds are numbered by github.run_number, NOT by phase.** Each phase typically produces 1-3 builds. Current phase: 1.7 (dwell + bloom). Current build: 15 (in CI at handover write time).
+- **Builds are numbered by github.run_number, NOT by phase.** Each phase typically produces 1-3 builds. Current phase: 1.7 (dwell + bloom). Current build: **16 (shipped, mirrored at dl-build-16)**.
 
 ---
 
