@@ -12,7 +12,7 @@ object IntentLauncher {
             is SlotAction.LaunchApp -> ctx.packageManager.getLaunchIntentForPackage(action.packageName)
             is SlotAction.Deeplink -> resolveDeeplink(ctx, action)
             is SlotAction.SettingsPanel -> Intent(action.action)
-            SlotAction.Pop -> null
+            SlotAction.Pop, SlotAction.PagePrev, SlotAction.PageNext, SlotAction.NoOp -> null
         }
         if (intent == null) {
             toast(ctx, "No app for that action")
