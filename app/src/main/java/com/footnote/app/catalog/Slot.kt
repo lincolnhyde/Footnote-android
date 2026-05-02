@@ -34,6 +34,9 @@ sealed interface SlotAction {
     data class Deeplink(val uri: Uri, val fallbackPackage: String? = null) : SlotAction
     data class SettingsPanel(val action: String) : SlotAction
     data object Pop : SlotAction
+    data object PagePrev : SlotAction
+    data object PageNext : SlotAction
+    data object NoOp : SlotAction
 }
 
 sealed interface SlotIcon {
