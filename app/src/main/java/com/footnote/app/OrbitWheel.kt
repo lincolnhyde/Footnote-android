@@ -20,17 +20,15 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.footnote.app.catalog.Slot
 import kotlinx.coroutines.launch
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.sin
 
-data class OrbitSlot(val label: String, val onSelect: () -> Unit)
-
 private val Accent = Color(0xFFE8B86E)
 private val SlotIdle = Color(0xFFB8B5AE)
-private val SlotDim = Color(0x55B8B5AE)
 private val RingIdle = Color(0x33FFFFFF)
 private val RingActivation = Color(0x66E8B86E)
 
@@ -52,9 +50,10 @@ private fun computeSelectedSlot(
 
 @Composable
 fun OrbitWheel(
-    slots: List<OrbitSlot>,
+    slots: List<Slot>,
     modifier: Modifier = Modifier,
-    onSlotFired: (Int) -> Unit = {}
+    onSlotChosen: (Int) -> Unit = {},
+    onCancelled: () -> Unit = {}
 ) {
     var center by remember { mutableStateOf<Offset?>(null) }
     var pointer by remember { mutableStateOf<Offset?>(null) }
@@ -67,10 +66,10 @@ fun OrbitWheel(
     val appear = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
 
-    val selectedSlot = remember(center, pointer) {
+    val selectedSlot = remember(center, pointer, slots) {
         val c = center
         val p = pointer
-        if (c == null || p == null) null
+        if (c == null || p == null || slots.isEmpty()) null
         else computeSelectedSlot(c, p, slots.size, activationRadiusPx)
     }
 
@@ -94,7 +93,7 @@ fun OrbitWheel(
                     onDragEnd = {
                         val c = center
                         val p = pointer
-                        val sel = if (c != null && p != null)
+                        val sel = if (c != null && p != null && slots.isNotEmpty())
                             computeSelectedSlot(c, p, slots.size, activationRadiusPx)
                         else null
                         scope.launch {
@@ -102,10 +101,7 @@ fun OrbitWheel(
                             center = null
                             pointer = null
                         }
-                        if (sel != null) {
-                            slots[sel].onSelect()
-                            onSlotFired(sel)
-                        }
+                        if (sel != null) onSlotChosen(sel) else onCancelled()
                     },
                     onDragCancel = {
                         scope.launch {
@@ -113,6 +109,7 @@ fun OrbitWheel(
                             center = null
                             pointer = null
                         }
+                        onCancelled()
                     }
                 )
             }
@@ -124,7 +121,7 @@ fun OrbitWheel(
         val curWheelR = wheelRadiusPx * (0.85f + 0.15f * a)
         val curActivationR = activationRadiusPx * (0.7f + 0.3f * a)
 
-        // Soft halo behind the wheel for depth
+        // Soft halo
         drawCircle(
             brush = Brush.radialGradient(
                 colors = listOf(Color(0x33000000), Color(0x00000000)),
@@ -135,7 +132,6 @@ fun OrbitWheel(
             center = c
         )
 
-        // Activation ring (cancel zone)
         drawCircle(
             color = RingActivation.copy(alpha = RingActivation.alpha * a),
             radius = curActivationR,
@@ -143,7 +139,6 @@ fun OrbitWheel(
             style = Stroke(width = 1.5f)
         )
 
-        // Outer wheel ring
         drawCircle(
             color = RingIdle.copy(alpha = RingIdle.alpha * a),
             radius = curWheelR,
@@ -151,7 +146,8 @@ fun OrbitWheel(
             style = Stroke(width = 1.2f)
         )
 
-        // Slot labels
+        if (slots.isEmpty()) return@Canvas
+
         val perSlot = 360f / slots.size
         slots.forEachIndexed { i, slot ->
             val angleDeg = -90f + i * perSlot
@@ -159,6 +155,8 @@ fun OrbitWheel(
             val sx = c.x + curWheelR * cos(rad).toFloat()
             val sy = c.y + curWheelR * sin(rad).toFloat()
             val isSel = selectedSlot == i
+            val isBranch = slot is Slot.Branch
+            val text = if (isBranch) "${slot.label} ›" else slot.label
 
             val style = TextStyle(
                 color = (if (isSel) Accent else SlotIdle).copy(
@@ -169,10 +167,10 @@ fun OrbitWheel(
                 letterSpacing = 0.5.sp,
                 textAlign = TextAlign.Center
             )
-            val measured = textMeasurer.measure(slot.label, style)
+            val measured = textMeasurer.measure(text, style)
             drawText(
                 textMeasurer = textMeasurer,
-                text = slot.label,
+                text = text,
                 style = style,
                 topLeft = Offset(
                     sx - measured.size.width / 2f,
@@ -181,7 +179,6 @@ fun OrbitWheel(
             )
         }
 
-        // Selected slot accent dot at the angle
         if (selectedSlot != null) {
             val angleDeg = -90f + selectedSlot * perSlot
             val rad = Math.toRadians(angleDeg.toDouble())
@@ -194,7 +191,6 @@ fun OrbitWheel(
             )
         }
 
-        // Finger trail
         val p = pointer
         if (p != null) {
             drawLine(

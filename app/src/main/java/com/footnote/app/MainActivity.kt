@@ -1,11 +1,7 @@
 package com.footnote.app
 
 import android.content.Context
-import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
-import android.provider.Settings
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -20,18 +16,17 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.footnote.app.catalog.CatalogRoot
+import com.footnote.app.core.IntentLauncher
+import com.footnote.app.ranking.ContextSnapshot
+import com.footnote.app.ranking.SelectionLogger
+import com.footnote.app.ui.orbit.OrbitHost
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent { FootnoteScreen() }
     }
-}
-
-private fun safeStart(ctx: Context, intent: Intent) {
-    intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-    runCatching { ctx.startActivity(intent) }
-        .onFailure { Toast.makeText(ctx, "No app for that action", Toast.LENGTH_SHORT).show() }
 }
 
 private fun versionLabel(ctx: Context): String {
@@ -46,20 +41,11 @@ private fun versionLabel(ctx: Context): String {
 @Composable
 fun FootnoteScreen() {
     val ctx = LocalContext.current
+    val appCtx = ctx.applicationContext
     var orbitUses by remember { mutableStateOf(0) }
     var lastFired by remember { mutableStateOf<String?>(null) }
     val version = remember { versionLabel(ctx) }
-
-    val slots = remember {
-        listOf(
-            OrbitSlot("Phone") { safeStart(ctx, Intent(Intent.ACTION_DIAL)) },
-            OrbitSlot("Camera") { safeStart(ctx, Intent("android.media.action.STILL_IMAGE_CAMERA")) },
-            OrbitSlot("Browser") { safeStart(ctx, Intent(Intent.ACTION_VIEW, Uri.parse("https://"))) },
-            OrbitSlot("Messages") { safeStart(ctx, Intent(Intent.ACTION_VIEW, Uri.parse("sms:"))) },
-            OrbitSlot("Maps") { safeStart(ctx, Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0"))) },
-            OrbitSlot("Settings") { safeStart(ctx, Intent(Settings.ACTION_SETTINGS)) }
-        )
-    }
+    val catalog = remember { CatalogRoot(appCtx) }
 
     Box(
         modifier = Modifier
@@ -94,11 +80,13 @@ fun FootnoteScreen() {
             )
         }
 
-        OrbitWheel(
-            slots = slots,
-            onSlotFired = { idx ->
+        OrbitHost(
+            rootSlotsLoader = { catalog.rootSlots(ContextSnapshot.now()) },
+            onLeafFired = { leaf ->
+                IntentLauncher.launch(ctx, leaf.action)
+                SelectionLogger.log(ctx, leaf.id, ContextSnapshot.now())
                 orbitUses += 1
-                lastFired = slots[idx].label
+                lastFired = leaf.label
             }
         )
 
