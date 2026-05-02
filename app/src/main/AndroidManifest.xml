@@ -4,10 +4,6 @@
 
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
         tools:ignore="QueryAllPackagesPermission" />
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <queries>
         <intent>
@@ -36,17 +32,21 @@
         </activity>
 
         <activity
-            android:name=".onboarding.OnboardingActivity"
+            android:name=".launcher.LauncherActivity"
             android:exported="false"
-            android:theme="@style/Theme.Footnote" />
+            android:theme="@style/Theme.Footnote.Launcher"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTop" />
 
         <service
-            android:name=".overlay.OverlayService"
-            android:exported="false"
-            android:foregroundServiceType="specialUse">
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="edge_launcher_overlay" />
+            android:name=".launcher.FootnoteTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_qs_tile"
+            android:label="Footnote"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
         </service>
     </application>
 </manifest>

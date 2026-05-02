@@ -12,39 +12,7 @@ class CatalogRoot(private val appCtx: Context) {
     private val curated = CuratedAppsProvider(appCtx)
     private val installed = InstalledAppsProvider(appCtx)
 
-    /**
-     * Wheel-era root composition. Kept around so the parked OrbitHost can still
-     * compile if we re-wire it temporarily. The edge launcher uses [suggested]
-     * and [installedApps] directly.
-     */
-    suspend fun rootSlots(ctx: ContextSnapshot): List<Slot> {
-        val curatedSlots = curated.slots(ctx)
-        val tail = buildList {
-            addAll(curatedSlots)
-            add(installed.branch)
-            add(SystemSettingsProvider.branch)
-        }
-
-        val dao = FootnoteDb.get(appCtx).selections()
-        val historyCount = runCatching { dao.count() }.getOrDefault(0)
-        if (historyCount < COLD_START_THRESHOLD) return tail
-
-        val candidates = collectCandidates(curatedSlots + installed.branch, ctx)
-        val recent = runCatching { dao.recent(limit = HISTORY_LIMIT) }
-            .getOrDefault(emptyList())
-        val predicted = SlotRanker.rank(candidates.map { it.leaf }, recent, ctx, PREDICTED_LIMIT)
-        if (predicted.isEmpty()) return tail
-
-        val parentLabelById = candidates.associate { it.leaf.id to it.parentLabel }
-        val labeled = predicted.map { leaf ->
-            val parent = parentLabelById[leaf.id]
-            if (parent.isNullOrBlank() || parent == installed.branch.label) leaf
-            else leaf.copy(label = "$parent ${leaf.label}")
-        }
-        return labeled + tail
-    }
-
-    /** Top-N predicted leaves for the edge launcher's Immediate / Active Stack. */
+    /** Top-N predicted leaves for the launcher's Suggested grid. */
     suspend fun suggested(ctx: ContextSnapshot, limit: Int): List<Slot.Leaf> {
         val dao = FootnoteDb.get(appCtx).selections()
         val curatedSlots = curated.slots(ctx)
@@ -112,8 +80,6 @@ class CatalogRoot(private val appCtx: Context) {
     private data class Candidate(val parentLabel: String?, val leaf: Slot.Leaf)
 
     companion object {
-        private const val COLD_START_THRESHOLD = 1
-        private const val PREDICTED_LIMIT = 3
         private const val HISTORY_LIMIT = 500
     }
 }
