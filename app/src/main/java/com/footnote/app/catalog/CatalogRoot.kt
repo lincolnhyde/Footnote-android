@@ -27,7 +27,8 @@ class CatalogRoot(private val appCtx: Context) {
             return tail
         }
 
-        val candidates = collectCandidates(curatedSlots, ctx)
+        val rankableRoots = curatedSlots + installed.branch
+        val candidates = collectCandidates(rankableRoots, ctx)
         val recent = runCatching { dao.recent(limit = HISTORY_LIMIT) }
             .getOrDefault(emptyList())
         val predicted = SlotRanker.rank(candidates.map { it.leaf }, recent, ctx, PREDICTED_LIMIT)
@@ -36,7 +37,10 @@ class CatalogRoot(private val appCtx: Context) {
         val parentLabelById = candidates.associate { it.leaf.id to it.parentLabel }
         val labeled = predicted.map { leaf ->
             val parent = parentLabelById[leaf.id]
-            if (parent.isNullOrBlank()) leaf
+            // Installed-app leaves already use the app's name as label, so adding
+            // "All apps" as a prefix would be noise. Only prefix if the parent is
+            // semantically meaningful (curated app branches: Spotify, Maps, YouTube).
+            if (parent.isNullOrBlank() || parent == installed.branch.label) leaf
             else leaf.copy(label = "$parent ${leaf.label}")
         }
 
@@ -78,8 +82,9 @@ class CatalogRoot(private val appCtx: Context) {
     private data class Candidate(val parentLabel: String?, val leaf: Slot.Leaf)
 
     companion object {
-        // Below this many recorded launches, the ranker is too noisy to trust.
-        private const val COLD_START_THRESHOLD = 10
+        // Predict from the very first launch — even one signal beats the
+        // deterministic root for someone who just launched what they want.
+        private const val COLD_START_THRESHOLD = 1
         // How many predicted leaves to show at the root (tail = curated branches +
         // All apps + Settings, currently 5 entries — keeping pred small avoids
         // pagination pressure on the wheel).
