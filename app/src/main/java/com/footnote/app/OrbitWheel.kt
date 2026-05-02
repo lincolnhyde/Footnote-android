@@ -1,5 +1,6 @@
 package com.footnote.app
 
+import android.view.HapticFeedbackConstants
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -13,6 +14,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
@@ -64,12 +66,13 @@ fun OrbitWheel(
     val density = LocalDensity.current
     val activationRadiusPx = with(density) { 44.dp.toPx() }
     val wheelRadiusPx = with(density) { 104.dp.toPx() }
-    val drillThresholdPx = with(density) { 40.dp.toPx() }
+    val drillThresholdPx = with(density) { 14.dp.toPx() }
     val textMeasurer = rememberTextMeasurer()
 
     val appear = remember { Animatable(0f) }
     val frameAlpha = remember { Animatable(1f) }
     val scope = rememberCoroutineScope()
+    val view = LocalView.current
 
     val latestSlots by rememberUpdatedState(slots)
     val latestOnSlotChosen by rememberUpdatedState(onSlotChosen)
@@ -79,8 +82,8 @@ fun OrbitWheel(
 
     LaunchedEffect(slots) {
         if (slots.isNotEmpty()) {
-            frameAlpha.snapTo(0.25f)
-            frameAlpha.animateTo(1f, tween(durationMillis = 150))
+            frameAlpha.snapTo(0f)
+            frameAlpha.animateTo(1f, tween(durationMillis = 200))
         }
     }
 
@@ -137,6 +140,7 @@ fun OrbitWheel(
                                 if (sel != null && canDrill) {
                                     drillCooldownEnd = now + 220
                                     popCooldownEnd = now + 220
+                                    view.performHapticFeedback(HapticFeedbackConstants.GESTURE_END)
                                     latestOnDrillRequested(sel)
                                 }
                             }
@@ -144,6 +148,7 @@ fun OrbitWheel(
                             if (wasInActivation && !inActivation && now > popCooldownEnd) {
                                 popCooldownEnd = now + 220
                                 drillCooldownEnd = now + 220
+                                view.performHapticFeedback(HapticFeedbackConstants.GESTURE_END)
                                 latestOnPopRequested()
                             }
 
