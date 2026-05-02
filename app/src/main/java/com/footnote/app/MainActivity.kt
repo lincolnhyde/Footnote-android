@@ -34,11 +34,21 @@ private fun safeStart(ctx: Context, intent: Intent) {
         .onFailure { Toast.makeText(ctx, "No app for that action", Toast.LENGTH_SHORT).show() }
 }
 
+private fun versionLabel(ctx: Context): String {
+    val info = runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0) }.getOrNull()
+    val name = info?.versionName ?: "?"
+    val code = info?.let {
+        if (android.os.Build.VERSION.SDK_INT >= 28) it.longVersionCode else it.versionCode.toLong()
+    } ?: 0L
+    return "v$name · build $code"
+}
+
 @Composable
 fun FootnoteScreen() {
     val ctx = LocalContext.current
     var orbitUses by remember { mutableStateOf(0) }
     var lastFired by remember { mutableStateOf<String?>(null) }
+    val version = remember { versionLabel(ctx) }
 
     val slots = remember {
         listOf(
@@ -113,5 +123,15 @@ fun FootnoteScreen() {
                 )
             }
         }
+
+        Text(
+            text = version,
+            color = Color(0xFF4A4744),
+            fontSize = 9.sp,
+            letterSpacing = 0.5.sp,
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(16.dp)
+        )
     }
 }
