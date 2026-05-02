@@ -14,8 +14,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -52,24 +54,33 @@ fun FootnoteScreen() {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF101012))
+            .background(
+                Brush.radialGradient(
+                    colors = listOf(Color(0xFF1A1816), Color(0xFF0B0A09)),
+                    radius = 1400f
+                )
+            )
     ) {
         Column(
             modifier = Modifier
                 .align(Alignment.Center)
-                .padding(32.dp),
+                .padding(40.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
                 text = "Footnote",
-                color = Color.White.copy(alpha = 0.85f),
-                fontSize = 28.sp
+                color = Color(0xFFE8B86E),
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Light,
+                letterSpacing = 4.sp
             )
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(28.dp))
             Text(
-                text = "Long-press anywhere, then drag\noutward to a slot.",
-                color = Color.White.copy(alpha = 0.45f),
-                fontSize = 14.sp
+                text = "press, drag, release",
+                color = Color(0xFF8A8580),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Light,
+                letterSpacing = 2.sp
             )
         }
 
@@ -84,19 +95,21 @@ fun FootnoteScreen() {
         Column(
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .padding(16.dp),
+                .padding(20.dp),
             horizontalAlignment = Alignment.End
         ) {
             Text(
-                text = "uses: $orbitUses",
-                color = Color.White.copy(alpha = 0.4f),
-                fontSize = 12.sp
+                text = "$orbitUses",
+                color = Color(0xFF6E6A65),
+                fontSize = 11.sp,
+                letterSpacing = 1.sp
             )
             lastFired?.let {
                 Text(
-                    text = "last: $it",
-                    color = Color.White.copy(alpha = 0.4f),
-                    fontSize = 12.sp
+                    text = it.lowercase(),
+                    color = Color(0xFF6E6A65),
+                    fontSize = 10.sp,
+                    letterSpacing = 1.sp
                 )
             }
         }
