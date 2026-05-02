@@ -27,12 +27,30 @@ jobs:
         run: gradle wrapper --gradle-version 8.5 --distribution-type bin
 
       - name: Build debug APK
-        run: ./gradlew assembleDebug --no-daemon -PappVersionCode=${{ github.run_number }} -PappVersionName=0.2.${{ github.run_number }}
+        id: build
+        run: |
+          set -o pipefail
+          ./gradlew assembleDebug --no-daemon --stacktrace -PappVersionCode=${{ github.run_number }} -PappVersionName=0.2.${{ github.run_number }} 2>&1 | tee /tmp/build.log
+
+      - name: Surface build log on failure
+        if: failure() && steps.build.outcome == 'failure'
+        run: |
+          {
+            echo "## Build failure"
+            echo
+            echo "### Last 300 lines of gradle output"
+            echo
+            echo '```'
+            tail -n 300 /tmp/build.log || echo "no build.log captured"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Rename APK with run number
+        if: success()
         run: cp app/build/outputs/apk/debug/app-debug.apk footnote-prototype-${{ github.run_number }}.apk
 
       - name: Publish GitHub Release
+        if: success()
         uses: softprops/action-gh-release@v2
         with:
           tag_name: prototype-${{ github.run_number }}
@@ -45,6 +63,7 @@ jobs:
           make_latest: 'true'
 
       - name: Upload APK as workflow artifact (backup)
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: footnote-debug-apk
