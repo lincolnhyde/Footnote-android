@@ -66,6 +66,10 @@ fun OrbitWheel(
     val appear = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
 
+    val latestSlots by rememberUpdatedState(slots)
+    val latestOnSlotChosen by rememberUpdatedState(onSlotChosen)
+    val latestOnCancelled by rememberUpdatedState(onCancelled)
+
     val selectedSlot = remember(center, pointer, slots) {
         val c = center
         val p = pointer
@@ -76,7 +80,7 @@ fun OrbitWheel(
     Canvas(
         modifier = modifier
             .fillMaxSize()
-            .pointerInput(slots) {
+            .pointerInput(Unit) {
                 detectDragGesturesAfterLongPress(
                     onDragStart = { offset ->
                         center = offset
@@ -93,15 +97,16 @@ fun OrbitWheel(
                     onDragEnd = {
                         val c = center
                         val p = pointer
-                        val sel = if (c != null && p != null && slots.isNotEmpty())
-                            computeSelectedSlot(c, p, slots.size, activationRadiusPx)
+                        val s = latestSlots
+                        val sel = if (c != null && p != null && s.isNotEmpty())
+                            computeSelectedSlot(c, p, s.size, activationRadiusPx)
                         else null
                         scope.launch {
                             appear.animateTo(0f, tween(durationMillis = 120))
                             center = null
                             pointer = null
                         }
-                        if (sel != null) onSlotChosen(sel) else onCancelled()
+                        if (sel != null) latestOnSlotChosen(sel) else latestOnCancelled()
                     },
                     onDragCancel = {
                         scope.launch {
@@ -109,7 +114,7 @@ fun OrbitWheel(
                             center = null
                             pointer = null
                         }
-                        onCancelled()
+                        latestOnCancelled()
                     }
                 )
             }
