@@ -26,7 +26,6 @@ import android.view.HapticFeedbackConstants
 import com.footnote.app.catalog.Slot
 import com.footnote.app.catalog.SlotAction
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withFrameMillis
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
