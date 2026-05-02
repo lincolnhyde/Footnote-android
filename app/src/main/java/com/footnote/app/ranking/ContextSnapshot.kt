@@ -25,5 +25,5 @@ data class ContextSnapshot(
 }
 
 enum class TriggerSource {
-    IN_APP, NOTIFICATION, EDGE_SWIPE, VOLUME_COMBO, QS_TILE
+    IN_APP, NOTIFICATION, EDGE_SWIPE, VOLUME_COMBO, QS_TILE, SIDE_KEY
 }
