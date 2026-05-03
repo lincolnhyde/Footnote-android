@@ -20,10 +20,17 @@ class CatalogRoot(private val appCtx: Context) {
         val recent = runCatching { dao.recent(limit = HISTORY_LIMIT) }
             .getOrDefault(emptyList())
         val predicted = SlotRanker.rank(candidates.map { it.leaf }, recent, ctx, limit)
-        if (predicted.isEmpty()) return emptyList()
+        val selected = if (predicted.isNotEmpty()) {
+            predicted
+        } else {
+            // Cold start: no usage history yet. Show installed apps so the grid
+            // isn't blank on first run; the ranker takes over after a few taps.
+            installed.loadAll().take(limit)
+        }
+        if (selected.isEmpty()) return emptyList()
 
         val parentLabelById = candidates.associate { it.leaf.id to it.parentLabel }
-        return predicted.map { leaf ->
+        return selected.map { leaf ->
             val parent = parentLabelById[leaf.id]
             if (parent.isNullOrBlank() || parent == installed.branch.label) leaf
             else leaf.copy(label = "$parent ${leaf.label}")
